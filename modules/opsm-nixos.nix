@@ -27,7 +27,7 @@
       group = mkOption {
         type = types.str;
         description = "Group owner of the installed file.";
-        default = users.${config.owner}.group or "0";
+        default = users.${config.user}.group or "0";
       };
 
       mode = mkOption {
@@ -35,13 +35,6 @@
         description = "Access permissions of the installed file, in a form understood by chmod.";
         default = "0400";
       };
-
-      # TODO not sure this is necessary
-      # requiringServices = mkOption { 
-      #   type = with types; listOf str;
-      #   description = ''List of systemd units that should require this secret to be installed before they should start. This will set the listed units' `Requires` and `After` to the service corresponding to this secret.'';
-      #   default = [];
-      # };
     };
   });
 in {
@@ -64,6 +57,8 @@ in {
       description = ''
         Interval, in seconds, at which all secrets should be re-read from 1Password.
         If null, secrets will not be refreshed except for when the backing service is restarted.
+
+        Keep in mind the request quotas documented on 1Password's website: https://developer.1password.com/docs/service-accounts/get-started/#request-quotas
       '';
     };
 
@@ -79,6 +74,7 @@ in {
 
   config = lib.mkIf cfg.enable {
     # During activation, ensure a ramfs exists at the destination directory
+    # TODO use admin group instead of keys if isDarwin
     system.activationScripts.opsm-secrets-init = {
       text = ''
         mkdir -p ${secretDir}
@@ -86,6 +82,7 @@ in {
         if ! grep -q "${secretDir} ramfs" /proc/mounts; then
           mount -t ramfs none ${secretDir} -o nodev,nosuid,mode=0751
         fi
+        chown :keys ${secretDir}
       '';
     };
 
@@ -97,23 +94,38 @@ in {
       enable = true;
 
       serviceConfig.TimeoutStartSec = "5m";
-      serviceConfig.Restart = "always";
+      serviceConfig.Restart = if cfg.refreshInterval != null then "always" else "on-failure";
       serviceConfig.RestartSec = "1s";
+      unitConfig.ConditionPathExists = cfg.serviceAccountTokenPath;
 
       path = [ pkgs._1password ];
 
-      environment.OP_SERVICE_ACCOUNT_TOKEN = "$(cat ${cfg.serviceAccountTokenPath})";
+      # `op` errors out without a config directory set
+      environment.OP_CONFIG_DIR = "/root/.config/op";
 
       # We need Internet access to read from 1Password
       wants = ["network-online.target"];
       after = ["network-online.target"];
 
-      wantedBy = ["opsm-secrets.target"];
+      wantedBy = ["opsm-secrets.target" "multi-user.target"];
 
-      preStart = ''
-        # Ensure connectivity to 1Password server
-        op whoami
+      script = ''
+        export OP_SERVICE_ACCOUNT_TOKEN=$(cat ${cfg.serviceAccountTokenPath})
+        # Create file with permissions before installing secret material
+        export SECRET_FILE="${secretDir}/${n}"
+
+        if [ ! -f $SECRET_FILE ]; then
+          touch $SECRET_FILE
+        fi
+        chown ${v.user}:${v.group} $SECRET_FILE
+        chmod ${v.mode} $SECRET_FILE
+
+        op read "${v.secretRef}" > $SECRET_FILE
+
+        ${if cfg.refreshInterval != null then ''
+          sleep ${builtins.toString cfg.refreshInterval}
+        '' else ""}
       '';
-    });
+    }) cfg.secrets;
   };
 }

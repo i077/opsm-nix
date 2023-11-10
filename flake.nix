@@ -7,5 +7,6 @@
   };
 
   outputs = { self, nixpkgs, utils }: {
+    nixosModules.default = import ./modules/opsm-nixos.nix;
   };
 }
