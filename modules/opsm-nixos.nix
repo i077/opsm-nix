@@ -76,6 +76,7 @@ in {
     # During activation, ensure a ramfs exists at the destination directory
     # TODO use admin group instead of keys if isDarwin
     system.activationScripts.opsm-secrets-init = {
+      # This activation script is based off of agenix's mountCommand activation
       text = ''
         mkdir -p ${secretDir}
         chmod 0751 ${secretDir}
