@@ -1,6 +1,6 @@
 # 1Password secrets management for NixOS
 
-`opsm-nix` (TODO: name) provides secrets management for NixOS using items from a 1Password vault.
+`opsm-nix` provides secrets management for NixOS using items from a 1Password vault.
 It uses [1Password Service Accounts](https://developer.1password.com/docs/service-accounts)
 to access the vault without the need for standing up additional infrastructure.
 
