@@ -99,7 +99,7 @@ in {
       serviceConfig.RestartSec = "1s";
       unitConfig.ConditionPathExists = cfg.serviceAccountTokenPath;
 
-      path = [ pkgs._1password ];
+      path = with pkgs; [ _1password curl ];
 
       # `op` errors out without a config directory set
       environment.OP_CONFIG_DIR = "/root/.config/op";
@@ -112,16 +112,28 @@ in {
 
       script = ''
         export OP_SERVICE_ACCOUNT_TOKEN=$(cat ${cfg.serviceAccountTokenPath})
+
+        # Wait up to 60s to reach 1Password
+        OP_URL=$(op whoami | grep "URL" | sed 's/.*  //')
+        RETRIES=4
+        while [[ $RETRIES -gt 0 ]] && ! curl -fs -o /dev/null $OP_URL; do
+          RETRIES=$(($RETRIES - 1))
+          echo "Waiting to reach 1Password..."
+          sleep 15
+        done
+        if [[ $RETRIES -eq 0 ]]; then
+          echo "Could not reach 1Password!"
+          exit 1
+        fi
+
         # Create file with permissions before installing secret material
         export SECRET_FILE="${secretDir}/${n}"
-
         if [ ! -f $SECRET_FILE ]; then
           touch $SECRET_FILE
         fi
         chown ${v.user}:${v.group} $SECRET_FILE
-        chmod ${v.mode} $SECRET_FILE
 
-        op read "${v.secretRef}" > $SECRET_FILE
+        op read -o $SECRET_FILE --file-mode ${v.mode} --force "${v.secretRef}"
 
         ${if cfg.refreshInterval != null then ''
           sleep ${builtins.toString cfg.refreshInterval}
