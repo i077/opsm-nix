@@ -27,6 +27,7 @@ and provide the account read access to this vault only.
 1Password will generate a token for this service account.
 Save it to your 1Password account, then copy it to `/etc/opsm-token` in each of the machines
 in which you intend to use this module.
+Make sure this token is only readable by root and has no other permissions!
 
 ### Add to your configuration
 
@@ -41,6 +42,9 @@ Add it to your flake of NixOS configurations via the `modules` argument:
   };
 }
 ```
+
+Since 1Password's CLI is distributed under a non-free license, you'll also need to set
+`nixpkgs.config.allowUnfree` to `true` in your configuration as well.
 
 Then, in your configuration, enable the module and add your secrets, referring to them using
 [secret references](https://developer.1password.com/docs/cli/secret-references/).
